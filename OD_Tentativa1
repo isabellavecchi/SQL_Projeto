@@ -1,3 +1,12 @@
+-- FUNÇÃO P/ DISTRIBUIR ATRIBUTOS SEM SE PREOCUPAR COM OS NÚMEROS
+
+--	Tentativa de construir uma função que me permitisse colocar a ordem dos atributos que gostaria
+--de selecionar, colocando-os em ordem decrescente.
+
+--ao invés de colocar os valores dos atributos na ordem dos nomes dos mesmos,
+--escolheria a ordem dos atributos do mais forte ao mais fraco e o banco de 
+--dados colocaria para mim.
+
 CREATE DATABASE Old_Dragon;
 
 CREATE TABLE tb_personagem(
