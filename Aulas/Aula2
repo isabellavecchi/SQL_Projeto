@@ -1,0 +1,98 @@
+--AULA BANCO DE DADOS PRÁTICA 2
+
+
+RESUMO DE BD
+
+-> Criar data base
+CREATE DATABASE engcomp02;
+
+
+
+-> Deletar data base
+DROP DATABASE engcomp02;
+
+
+
+-> Criar tabela
+CREATE TABLE teste(
+	id_teste INTEGER,
+	nome VARCHAR(40),
+	CPF VARCHAR(10)
+);
+
+
+
+
+->Inserir item na tabela
+
+INSERT INTO teste (id_teste, nome, cpf)
+VALUES(1,'Joao', '123456789')
+
+
+
+
+->Selecionar item da tabela
+
+SELECT * FROM teste;
+
+
+
+
+-> Criar Schemas
+
+CREATE SCHEMA vendas;
+
+
+
+
+-> Criar tabelas no schema
+
+CREATE TABLE vendas.teste2(
+	id_teste INTEGER,
+	nome VARCHAR(40),
+	CPF VARCHAR(10)
+);
+
+
+
+
+-> Tabela com chave estrangeira
+
+CREATE TABLE vendas.pedidos(
+	cod_pedido	INTEGER PRIMARY KEY,
+	cod_prod 	INTEGER,
+	quantidade 	INTEGER,
+	CONSTRAINT pedidos_fk
+	FOREIGN KEY(cod_prod)
+	REFERENCES vendas.produtos (cod_prod)	
+);
+
+->coluna com restrições
+
+--ex1:
+desconto numeric CHECk (desconto >0 AND desconto <0.10)
+--ex2:
+preco numeric CONSTRAINT preco_positivo CHECK (preco > 0)
+--ex3:
+check (preco > desconto)
+
+
+
+->restrição de valor unico
+cod_prod integer CONSTRAINT unq_cod_prod UNIQUE,
+
+
+
+-> Adicionar coluna na tabela
+ALTER TABLE vendas.tbl_A ADD COLUMN tipo Char(2)
+
+->Alterar tipo da coluna
+ALTER TABLE vendas.tbl_A ALTER COLUMN tipo TYPE Char(5)
+
+-> Alterar nome da coluna
+
+ALTER TABLE vendas.tbl_A RENAME COLUMN tipo TO tipo_produto
+
+
+--COMANDO QUE MOSTRA UM MONTE DE TREM
+SELECT * FROM INFORMATION_SCHEMA.COLUMNS

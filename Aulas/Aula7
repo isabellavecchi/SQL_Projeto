@@ -1,0 +1,63 @@
+--teste.csv (aquivo criado em um bloco de notas)
+"id_cliente";"nome";"sobrenome";"idade"
+1; "Philip"; "Marlowe"; 38
+2; "Richard"; "Hannay"; 42
+3; "Holly"; "Martins"; 25
+4; "Harray"; "Palmer"; 36
+5; "Mark"; "Hall"; 47
+
+--ENTRANDO NO DATA BASE (dentro do psql)
+\c engcomp02
+
+-- MOSTRANDO OQ TEM DENTRO DE AULAS
+\dt aulas.*;
+
+-- CRIANDO TABELA
+engcomp02=# CREATE TABLE aulas.cliente_csv(
+engcomp02(# id_cliente INTEGER,
+engcomp02(# nome VARCHAR,
+engcomp02(# sobrenome VARCHAR,
+engcomp02(# idade INTEGER);
+CREATE TABLE
+
+--COPIANDO DE UM BLOCO DE NOTAS
+\COPY aulas.cliente_csv FROM 'C:\Users\mathe\Desktop\Matheus\UFU\2019-2\Banco de dados\teste.csv' DELIMITER ';' CSV HEADER
+
+--COPIANDO PARA UM BLOCO DE NOTAS
+\COPY aulas.tb_cliente TO 'C:\Users\mathe\Desktop\Matheus\UFU\2019-2\Banco de dados\backup_tb_cliente.csv' DELIMITER ';' CSV HEADER;
+
+--CRIANDO TABELA TEMPORARIA
+CREATE TEMPORARY TABLE tb_teste_resticoes(
+chave1 INTEGER,
+chave2 INTEGER,
+descricao VARCHAR(30),
+CONSTRAINT pk_teste PRIMARY KEY(chave1)
+);
+
+--MOSTRANDO A TABELA
+SELECT * FROM tb_teste_resticoes;
+
+--COLOCANDO VALORES NA TABELA REMPORARIA
+INSERT INTO tb_teste_resticoes VALUES(
+1,2, 'primeiro resgristo');
+
+INSERT INTO tb_teste_resticoes VALUES(
+2,2, 'segundo resgristo');
+
+--OBS: QUANDO FECHA A TABELA SOME
+
+--CRIANDO UMA VIEW
+CREATE VIEW aulas.item_estoque AS
+SELECT i.ds_item, e.quantidade
+FROM aulas.tb_item i
+JOIN aulas.tb_estoque e ON (i.id_item = e.id_item);
+
+--VENDO A VIEW
+SELECT * FROM aulas.id_item_estoque;
+
+
+
+
+
+
+

@@ -1,0 +1,169 @@
+CREATE DATABASE Old_Dragon;
+
+CREATE TABLE tb_personagem(
+	personagem	VARCHAR(62)	CONSTRAINT pk_personagem	PRIMARY KEY,
+	jogador		VARCHAR(62)	CONSTRAINT nn_jogador		NOT NULL,
+	raca		VARCHAR(32)	CONSTRAINT nn_raca			NOT NULL,
+	classe		VARCHAR(32)	CONSTRAINT nn_classe		NOT NULL,
+	nivel		INTEGER		CONSTRAINT nn_nivel			NOT NULL,
+	alinhamento	VARCHAR(32)	CONSTRAINT nn_alinhamento	NOT NULL,
+	CONSTRAINT fk_raca FOREIGN KEY(raca)
+		REFERENCES tb_raca(raca)
+);
+
+-- Role 4 sequências de d6, seis vezes, e insira os resultados nesta tabela
+CREATE TABLE tb_dados(
+	personagem	VARCHAR(62)	CONSTRAINT nn_jogador	NOT NULL,
+	seq			INTEGER		CONSTRAINT nn_seq		NOT NULL,
+	dados		NUMERIC[4]	CONSTRAINT nn_dados		NOT NULL
+);
+DROP TABLE tb_dados
+
+INSERT INTO tb_dados
+VALUES('isabella',1,'{4,3,6,5}'),
+('isabella',2,'{6,5,4,3}'),
+('isabella',3,'{4,5,2,3}'),
+('isabella',4,'{6,6,2,5}'),
+('isabella',5,'{4,5,6,5}'),
+('isabella',6,'{6,6,2,1}');
+
+CREATE TABLE tb_atributos(
+	personagem		VARCHAR(62)	CONSTRAINT nn_jogador	NOT NULL,	
+	forca			INTEGER,
+	inteligencia	INTEGER,
+	sabedoria		INTEGER,
+	destreza		INTEGER,
+	constituicao	INTEGER,
+	carisma			INTEGER,
+	CONSTRAINT fk_personagem FOREIGN KEY(personagem)
+		REFERENCES tb_personagem(personagem)
+);
+CREATE TABLE tb_raca(
+	raca				VARCHAR(32)	CONSTRAINT pk_raca		PRIMARY KEY,
+	dado_de_vida		INTEGER		CONSTRAINT nn_vida		NOT NULL,
+	modificador_mais	VARCHAR(32)	CONSTRAINT nn_mod_mais	NOT NULL,
+	modificador_menos	VARCHAR(32)	CONSTRAINT nn_mod_menos	NOT NULL,
+	altura				VARCHAR(32)	CONSTRAINT nn_altura	NOT NULL,
+	peso				VARCHAR(32)	CONSTRAINT nn_peso		NOT NULL,
+	maturidade			INTEGER		CONSTRAINT nn_maturid	NOT NULL,
+	expec_vida			INTEGER		CONSTRAINT nn_expec_vid	NOT NULL,
+	mov_base_metros		INTEGER		CONSTRAINT nn_mov_base	NOT NULL,
+	visao_escuro		INTEGER,
+	visao_penumbra		INTEGER,
+	maos_armas_medias	INTEGER		CONSTRAINT nn_maos_am	NOT NULL,
+	maos_armas_grandes	INTEGER		CONSTRAINT nn_maos_ag	NOT NULL
+);
+
+
+INSERT INTO tb_raca VALUES 	('humano',10,'escolha','escolha','1,60 - 1,90 metros','55 - 90 kg',15,70,9,NULL,NULL,1,1),
+							('anao',10,'constituicao','carisma','1,30 - 1,50 metros','50 - 70 kg',70,350,6,15,NULL,1,2),
+							('elfo',8,'destreza','constituicao','1,50 - 1,70 metros','40 - 50 kg',150,700,9,NULL,50,1,1),
+							('halfling',10,'destreza','forca','0,70 - 0,90 metros','20 - 35 kg',30,70,6,NULL,NULL,2,0);
+
+Select fn_atributos('isabella','forca','destreza','constituicao','sabedoria','inteligencia','carisma')
+
+CREATE OR REPLACE FUNCTION fn_atributos(
+	v_personagem	VARCHAR(64),
+	at1			VARCHAR(32),
+	at2			VARCHAR(32),
+	at3			VARCHAR(32),
+	at4			VARCHAR(32),
+	at5			VARCHAR(32),
+	at6			VARCHAR(32))
+RETURNS varchar AS
+$$
+	DECLARE
+		v_seq			tb_dados.seq%TYPE;
+		v_dados			INTEGER[4];
+		atributos		INTEGER[6];
+		nome_atributo	VARCHAR[6];
+		i				INTEGER;
+	BEGIN
+		nome_atributo[1]:=at1;
+		nome_atributo[2]:=at2;
+		nome_atributo[3]:=at3;
+		nome_atributo[4]:=at4;
+		nome_atributo[5]:=at5;
+		nome_atributo[6]:=at6;
+		v_seq := 0;
+		i:=0;
+		LOOP
+		EXIT WHEN v_seq = 7;
+			v_seq:= v_seq +1;
+			SELECT d.dados
+			INTO v_dados
+			FROM tb_dados d
+			WHERE d.seq == v_seq;
+			IF v_dados IS NULL
+			THEN
+				return 'role os dados antes e tente novamente';
+			END IF;
+			--Pegando os 3 maiores valores do dado e somando para colocar nos atributos
+			SELECT fn_ordena_decres(v_dados)
+			INTO v_dados;
+			atributos[v_seq] := v_dados[1] + v_dados[2] + v_dados[3];
+		END LOOP;
+		SELECT fn_ordena_decres(atributos);
+		RETURN '1) ' || nome_atributo[1] || ' = ' || atributos[1] ||';  2) ' || nome_atributo[2] || ' = ' || atributos[2] ||
+		';  3) ' || nome_atributo[3] || ' = ' || atributos[3] ||';  4) ' || nome_atributo[4] || ' = ' || atributos[4] ||
+		';  5) ' || nome_atributo[5] || ' = ' || atributos[5] ||';  6) ' || nome_atributo[6] || ' = ' || atributos[6];
+	END;
+$$
+LANGUAGE plpgsql;
+
+LOOP
+		EXIT WHEN i>6;
+			i:= i+1;
+			IF nome_atributo[i] == 'forca'
+				THEN INSERT INTO tb_atributos(forca)
+				VALUES (atributos[i]);
+			ELSE IF nome_atributo[i] == 'inteligencia'
+				THEN INSERT INTO tb_atributos(inteligencia)
+				VALUES (atributos[i]);
+			ELSE IF nome_atributo[i] == 'sabedoria'
+				THEN INSERT INTO tb_atributos(sabedoria)
+				VALUES (atributos[i]);
+			ELSE IF nome_atributo[i] == 'destreza'
+				THEN INSERT INTO tb_atributos(destreza)
+				VALUES (atributos[i]);
+			ELSE IF nome_atributo[i] == 'constituicao'
+				THEN INSERT INTO tb_atributos(constituicao)
+				VALUES (atributos[i]);
+			ELSE IF nome_atributo[i] == 'carisma'
+				THEN INSERT INTO tb_atributos(carisma)
+				VALUES (atributos[i]);
+			END IF;
+		END LOOP;
+
+--FUNÇÃO ORDENA DECRESCENTE
+CREATE OR REPLACE FUNCTION fn_ordena_decres(
+	vector	INTEGER[])
+RETURNS integer AS
+$$
+DECLARE
+	i		INTEGER;
+	j		INTEGER;
+	tamanho	INTEGER;
+	aux		INTEGER;
+BEGIN
+	tamanho := array_dims(vector);
+	i:=1;
+	j:=1;
+	LOOP
+	EXIT WHEN i > tamanho; 	
+		LOOP
+		EXIT WHEN j > tamanho;
+			IF vector[i] < vector [j]
+			THEN
+				aux = vector[i];
+				vector[i] = vector[j];
+				vector[j] = vector[i];
+			END IF;
+		j:= j+1;
+		END LOOP;
+	i:= i+1;
+	END LOOP;
+	RETURN vector;
+END
+$$
+LANGUAGE plpgsql

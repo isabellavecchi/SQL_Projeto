@@ -1,0 +1,188 @@
+--Função Soma
+CREATE OR REPLACE FUNCTION aulas.fn_soma(real,real) RETURNS real AS
+$$
+    
+	DECLARE						--opcional
+       	var1 ALIAS FOR $1;
+        var2 ALIAS FOR $2;
+    BEGIN
+     	RETURN var1 + var2;
+    END
+$$
+LANGUAGE plpgsql					--plpgsql = plsql
+
+
+--Função soma com parâmetros
+CREATE OR REPLACE FUNCTION aulas.fn_soma2(pvar1 real,pvar2 real) RETURNS real AS			--com os parâmetros não é necessário declarar
+$$
+    BEGIN
+     	RETURN pvar1 + pvar2;
+    END
+$$
+LANGUAGE plpgsql
+
+
+
+--Testando
+SELECT aulas.fn_soma(10,10);
+SELECT aulas.fn_soma2(10,10);
+
+
+
+--Função retornar soma através de uma string
+CREATE OR REPLACE FUNCTION aulas.fn_soma2_ret_string(pvar1 real,pvar2 real) RETURNS varchar AS
+$$
+	DECLARE
+		pSoma real;
+    BEGIN
+    	pSoma = pvar1 + pvar2;
+     	RETURN 'O valor da soma -> ' || pSoma;			--Famoso printf do plpgsql
+    END
+$$
+LANGUAGE plpgsql
+
+--Testando
+SELECT aulas.fn_soma2_ret_string(12.44,23.55)
+
+
+--Função para utilizar o "Nome" de algo do banco de dados
+CREATE OR REPLACE FUNCTION aulas.fn_ret_nome_cliente(integer)			--aqui o $1
+RETURNS varchar AS
+$$
+	DECLARE
+    	v_nome aulas.tb_cliente.nome%TYPE; 	--v_nome é do mesmo tipo da coluna nome da tabela cliente
+    BEGIN
+    	SELECT nome INTO v_nome FROM aulas.tb_cliente WHERE id_cliente = $1;	--$1 = integer (valor dentro do () na hora de chamar a função)
+        RETURN 'Nome do cliente: '||v_nome;
+    END
+$$
+LANGUAGE plpgsql;
+
+
+--Função retornar os valores do cliente a partir do seu código
+CREATE OR REPLACE FUNCTION aulas.fn_ret_nome_cliente_tupla(integer)
+RETURNS varchar AS																				
+$$
+	DECLARE
+    	v_tupla aulas.tb_cliente%ROWTYPE;
+    BEGIN
+    	SELECT * INTO v_tupla FROM aulas.tb_cliente WHERE id_cliente = $1;
+        RETURN 'Tupla(linha) '||v_tupla;
+    END
+$$
+LANGUAGE plpgsql;
+
+--Testando
+ex: aulas,fn_res_nome_cliente_tupla(algo aqui)
+
+-- RECORD != ROWTYPE
+--		em RECORD posso selecionar itens para colocar no SELECT
+CREATE OR REPLACE FUNCTION aulas.fn_ret_nome_cliente_record
+(aulas.tb_cliente.id_cliente%TYPE) RETURNS text AS
+$$
+	DECLARE
+    	v_linha RECORD;
+    BEGIN
+    	SELECT id_cliente, nome INTO v_linha FROM aulas.tb_cliente WHERE id_cliente = $1;
+        IF NOT FOUND THEN
+        	RAISE EXCEPTION 'Cliente % nao encontrado',$1;
+        ELSE
+        	RETURN 'Cliente encontrado!!';
+        END IF;
+    END
+$$
+LANGUAGE plpgsql;
+
+
+--Tabela para usar no TRIGGER
+CREATE TABLE aulas.tb_log(
+nome		VARCHAR(30),
+data_hora	TIMESTAMP
+);
+
+
+--Criando função para inserir valores na tabela
+CREATE OR REPLACE FUNCTION aulas.fn_log(pNome varchar)
+returns timestamp AS
+$$
+	BEGIN
+		INSERT INTO aulas.tb_log VALUES (pNome,now());
+		RETURN now();
+	END
+$$
+LANGUAGE plpgsql;
+
+--TESTANDO
+SELECT aulas.fn_log('Zeca')
+SELECT * FROM aulas.tb_log
+
+
+--Função mostra os clientes maior
+CREATE OR REPLACE FUNCTION aulas.fn_maior_5()
+RETURNS SETOF aulas.tb_cliente AS								--SETOF PEGA A TUPLA(Linha) INTEIRA
+'
+SELECT * FROM aulas.tb_cliente WHERE id_cliente > 5;				--ENTRE ' ' VIRA COMANDO SQL
+'
+LANGUAGE sql;
+
+--Testando
+SELECT aulas.fn_maior_5()								
+
+
+
+CREATE TABLE aulas.tb_categoria
+(
+	id_categoria	INTEGER,
+    ds_categoria	VARCHAR(40) NOT NULL,
+    fg_ativo		INTEGER NOT NULL,
+    PRIMARY KEY(id_categoria)
+);
+--ISSO AQUI DEVE SER ESCRITO NO COMEÇO DA CRIAÇÃO DA BD, deixar para que ela organize
+
+CREATE SEQUENCE aulas.sq_categoria;
+
+CREATE OR REPLACE FUNCTION aulas.fn_categoria(p_id_categoria integer,
+                                             p_descricao varchar,
+                                             p_flag integer,			--a escala tá ativa ou não
+                                             p_opcao char)
+RETURNS integer AS
+$$
+	DECLARE
+    	v_id_categoria aulas.tb_categoria.id_categoria%TYPE;
+
+    BEGIN
+
+    	IF p_opcao = 'I' THEN
+        	SELECT nextval('aulas.sq_categoria') INTO v_id_categoria;			--nextval sempre espera um valor inteiro e implementa 1
+            INSERT INTO aulas.tb_categoria(id_categoria,ds_categoria,fg_ativo)
+            VALUES (v_id_categoria, p_descricao, p_flag);
+            RETURN v_id_categoria;
+
+        ELSIF p_opcao = 'U' THEN
+        	UPDATE aulas.tb_categoria SET ds_categoria = p_descricao
+            WHERE id_categoria = p_id_categoria;
+            RETURN id_categoria;
+
+        ELSIF p_opcao = 'D' THEN
+        	DELETE FROM aulas.tb_categoria
+            WHERE id_categoria = p_id_categoria;
+            RETURN 0;
+
+        ELSE
+        	RETURN 1;
+
+        END IF;
+
+        EXCEPTION WHEN OTHERS THEN RETURN -1;
+    END
+$$
+LANGUAGE plpgsql
+
+
+--TESTANDO
+SELECT aulas.fn_categoria(null, 'CATEGORIA 1', 1, 'I');
+SELECT aulas.fn_categoria(5, null, null, 'D');
+SELECT aulas.fn_categoria(111, 'CATEGORIA 111 - ALTERADA', 1, 'U');
+SELECT aulas.fn_categoria(2, null, null, 'F');
+
+SELECT * FROM aulas.tb_categoria

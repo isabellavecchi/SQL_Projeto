@@ -1,0 +1,65 @@
+--AULA BANCO DE DADOS PRÁTICA 4
+
+
+--APELIDANDO PARA SIMPLIFICAR
+SELECT coluna_a FROM tabela_1 T1
+WHERE T1.coluna_b = (SELECT T2.coluna_b FROM tabela_2 T2
+                    WHERE T2.coluna_c = T1.coluna_c)
+
+
+--RECUPERAR INFORMAÇÕES DO PEDIDO DO CLIENTE ALEX
+SELECT p.dt_compra, p.id_cliente, p.valor FROM trab1.tb_pedido p
+WHERE p.id_cliente = (SELECT c.id_cliente FROM trab1.tb_cliente c
+                     WHERE c.nome = 'Alex');
+
+SELECT * FROM trab1.tb_cliente
+
+SELECT id_cliente, nome	 FROM trab1.tb_cliente
+WHERE trab1.tb_cliente.nome = 'JB'
+
+SELECT * FROM trab1.tb_cliente
+
+
+
+--SELECIONAR NOME DOS CLIENTES QUE FIZERAM PEDIDOS
+--não funfa
+SELECT c.id_cliente, c.nome FROM trab1.tb_cliente c
+WHERE c.id_cliente = (SELECT p.id_cliente FROM trab1.tb_pedido p)
+
+--jeito que funfa 					
+SELECT c.id_cliente, c.nome FROM aulas.tb_cliente c
+WHERE EXISTS (SELECT id_cliente FROM aulas.tb_pedido p WHERE c.id_cliente = p.id_cliente)	--selecionei toda a coluna de "id_cliente" da "tb_cliente" que chamei de "p"	
+SELECT c.id_cliente, c.nome FROM trab1.tb_cliente c										--compara as duas colunas/tabelas e mostra só os iguais
+
+--outro jeito
+SELECT id_cliente, nome, sobrenome FROM trab1.tb_cliente c
+WHERE EXISTS (SELECT 1 FROM trab1.tb_pedido p 				--"1" como operador booleano
+             WHERE p.id_cliente = c.id_cliente)		ORDER BY id_cliente	--ordenar de acordo com a id do cliente
+             
+             
+             
+             
+--RECUPERAR OS ITENS DOS PEDIDOS
+--descrição dos produtos e o valor de cada item
+SELECT * FROM trab1.tb_item_pedido
+SELECT * FROM trab1.tb_item
+
+SELECT ip.id_item, i.ds_item, ip.quantidade, i.preco_venda,
+ip.quantidade * i.preco_venda AS "Valor Venda"
+FROM trab1.tb_item i, trab1.tb_item_pedido ip
+WHERE ip.id_item = i.id_item
+
+--RECUPERAR O TOTAL DO PEDIDO																
+SELECT ip.id_pedido, SUM (ip.quantidade * i.preco_venda)
+AS "Total_Pedido"
+FROM trab1.tb_item_pedido ip, trab1.tb_item i
+WHERE ip.id_item = i.id_item GROUP BY ip.id_pedido ORDER BY ip.id_pedido
+
+--RECUPERAR O TOTAL DO PEDIDO E O NOME DO CLIENTE
+SELECT p.id_pedido, p.id_cliente,
+(SELECT c.nome FROM trab1.tb_cliente c WHERE c.id_cliente = p.id_cliente),
+(SELECT SUM ip.quantidade * i.preco_venda) AS "Total_Pedido"
+FROM trab1.tb_item_pedido ip, trab1.tb_item i
+WHERE ip.id_item = i.id_item AND p.id_pedido = ip.id_pedido GROUP BY ip.id_pedido
+ORDER BY ip.id_pedido;
+FROM trab1.tb_pedido p, trab1.tb_cliente c WHERE p.id_cliente = c.id_cliente

@@ -1,0 +1,1021 @@
+CREATE DATABASE Old_Dragon;
+
+CREATE TABLE tb_personagem(
+	jogador			VARCHAR(62)	CONSTRAINT nn_jogador		NOT NULL,
+	personagem		VARCHAR(62)	CONSTRAINT pk_personagem	PRIMARY KEY,
+	raca			VARCHAR(32)	CONSTRAINT nn_raca			NOT NULL,
+	classe			VARCHAR(32)	CONSTRAINT nn_classe		NOT NULL,
+	nivel			INTEGER		DEFAULT		1,
+	alinhamento		VARCHAR(32)	CONSTRAINT nn_alinhamento	NOT NULL,
+	xp				INTEGER		DEFAULT		0,
+	base_ataque		INTEGER,
+	jogada_protecao	INTEGER,
+	peso			INTEGER		CONSTRAINT nn_peso			NOT NULL,
+	idade			INTEGER		CONSTRAINT nn_idade			NOT NULL,
+	altura			INTEGER		CONSTRAINT nn_altura		NOT NULL,
+	CONSTRAINT fk_raca 	FOREIGN KEY(raca)
+		REFERENCES tb_raca(raca),
+	CONSTRAINT fk_classe FOREIGN KEY(classe)
+		REFERENCES tb_classe(classe)
+);
+
+DROP TABLE tb_personagem;
+
+---- 1° passo) ROLAGEM DE DADOS
+
+
+-- Role 4 sequências de d6, seis vezes, e insira os resultados nesta tabela
+CREATE TABLE tb_dados(
+	jogador		VARCHAR(62)	CONSTRAINT nn_jogador	NOT NULL,
+	seq			INTEGER		CONSTRAINT nn_seq		NOT NULL,
+	dado_1		INTEGER		CONSTRAINT nn_dado_1	NOT NULL,
+	dado_2		INTEGER		CONSTRAINT nn_dado_2	NOT NULL,
+	dado_3		INTEGER		CONSTRAINT nn_dado_3	NOT NULL,
+	dado_4		INTEGER		CONSTRAINT nn_dado_4	NOT NULL
+);
+DROP TABLE tb_dados;
+
+SELECT * FROM tb_dados
+
+-- Exemplo:
+
+INSERT INTO tb_dados
+VALUES('isabella',1,6,5,3,2),
+('isabella',2,6,4,5,1),
+('isabella',3,6,5,4,5),
+('isabella',4,6,6,4,1),
+('isabella',5,6,2,4,1),
+('isabella',6,6,6,4,1);
+
+SELECT * FROM tb_dados;
+
+
+-- Função que mostra os valores que serão colocados nos atributos
+CREATE OR REPLACE FUNCTION fn_valores_para_atributo(
+	v_jogador	VARCHAR(64))
+RETURNS varchar AS
+$$
+DECLARE
+	v_seq		tb_dados.seq%TYPE;
+	menor_valor	INTEGER;
+	soma		INTEGER;
+	atributos	INTEGER[6];
+BEGIN
+	v_seq :=0;
+	LOOP
+	EXIT WHEN v_seq > 6;
+		soma:= 0;
+		menor_valor:= 0;
+		v_seq := v_seq +1;
+		SELECT LEAST(dados_1,dados_2,dados_3,dados_4)
+		INTO menor_valor
+		FROM tb_dados
+		WHERE seq = v_seq AND jogador = v_jogador;
+		
+		SELECT dado_1 + dado_2 + dado_3 + dado_4
+		INTO soma
+		FROM tb_dados
+		WHERE seq = v_seq;
+		
+		soma := soma - menor_valor;
+		atributos[v_seq] := soma;
+	END LOOP;
+	Return 'Os valores de atributo para o Jogador: '||v_jogador||' são : ['||atributos[1]||', '||atributos[2]||
+	', '||atributos[3]||', '||atributos[4]||', '||atributos[5]||', '||atributos[6]||'].';
+END
+$$
+LANGUAGE plpgsql;
+
+DROP FUNCTION fn_valores_para_atributo()
+
+-- Executa para ver os valores:
+SELECT fn_valores_para_atributo('isabella')
+
+---- 2° passo) ESCOLHENDO OS VALORES PARA CADA ATRIBUTO
+
+CREATE TABLE tb_atributos(
+	jogador				VARCHAR(62)	CONSTRAINT nn_personagem		NOT NULL,
+	personagem			VARCHAR(62),	
+	nome_atributo		VARCHAR(32)	CONSTRAINT nn_nome_atributo		NOT NULL,
+	valor_atributo		INTEGER		CONSTRAINT nn_valor_atributo	NOT NULL,
+	mod_atributo		INTEGER		CONSTRAINT nn_mod_atributo		NOT NULL
+);
+DROP TABLE tb_atributos;
+
+-- FUNÇÃO INSERIR VALORES NA TABELA ATRIBUTOS
+--(insira os valores fornecidos pela função anterior na ordem de preferência - depois de inserir o nome do personagem)
+--Ordem: força; inteligência; sabedoria; destreza; constituição; carisma.
+
+CREATE OR REPLACE FUNCTION fn_inserir_atributos(
+	v_jogador		VARCHAR(64),
+	v_forca			INTEGER,
+	v_inteligencia	INTEGER,
+	v_sabedoria		INTEGER,
+	v_destreza		INTEGER,
+	v_constituicao	INTEGER,
+	v_carisma		INTEGER)
+RETURNS varchar AS
+$$
+DECLARE
+	v_mod_forca			INTEGER;
+	v_mod_inteligencia	INTEGER;
+	v_mod_sabedoria		INTEGER;
+	v_mod_destreza		INTEGER;
+	v_mod_constituicao	INTEGER;
+	v_mod_carisma		INTEGER;
+BEGIN	
+	v_mod_forca			:= FLOOR((v_forca - 10)/2);
+	v_mod_inteligencia	:= FLOOR((v_inteligencia - 10)/2);
+	v_mod_sabedoria		:= FLOOR((v_sabedoria - 10)/2);
+	v_mod_destreza		:= FLOOR((v_destreza - 10)/2);
+	v_mod_constituicao	:= FLOOR((v_constituicao - 10)/2);
+	v_mod_carisma		:= FLOOR((v_carisma - 10)/2);
+	
+	INSERT INTO tb_atributos(jogador,nome_atributo,valor_atributo,mod_atributo)
+	VALUES(v_jogador,'Força',v_forca,v_mod_forca),
+		(v_jogador,'Inteligência',v_inteligencia,v_mod_inteligencia),
+		(v_jogador,'Sabedoria',v_sabedoria,v_mod_sabedoria),
+		(v_jogador,'Destreza',v_destreza,v_mod_destreza),
+		(v_jogador,'Constituição',v_constituicao,v_mod_constituicao),
+		(v_jogador,'Carisma',v_carisma,v_mod_carisma);	
+	RETURN 'é isso aí';
+END
+$$
+LANGUAGE plpgsql;
+
+-- Exemplo:
+Select fn_inserir_atributos('isabella',15,12,17,15,14,16)
+
+SELECT * FROM tb_atributos
+
+--Por ordem DECRESCENTE
+CREATE OR REPLACE FUNCTION fn_atributos_decres(
+	v_jogador	VARCHAR(64),
+	at1			VARCHAR(32),
+	at2			VARCHAR(32),
+	at3			VARCHAR(32),
+	at4			VARCHAR(32),
+	at5			VARCHAR(32),
+	at6			VARCHAR(32)
+)
+RETURNS text AS
+$$
+DECLARE
+	v_seq		tb_dados.seq%TYPE;
+	menor_valor	INTEGER;
+	soma		INTEGER;
+	atributos	INTEGER[6];
+	i			INTEGER;
+	j			INTEGER;
+	aux			INTEGER;
+	v_mod_at1	INTEGER;
+	v_mod_at2	INTEGER;
+	v_mod_at3	INTEGER;
+	v_mod_at4	INTEGER;
+	v_mod_at5	INTEGER;
+	v_mod_at6	INTEGER;
+BEGIN
+	v_seq :=0;
+	LOOP
+	EXIT WHEN v_seq > 6;
+		soma:= 0;
+		menor_valor:= 0;
+		v_seq := v_seq +1;
+		SELECT LEAST(dado_1,dado_2,dado_3,dado_4)
+		INTO menor_valor
+		FROM tb_dados
+		WHERE seq = v_seq AND jogador = v_jogador;
+		
+		SELECT dado_1 + dado_2 + dado_3 + dado_4
+		INTO soma
+		FROM tb_dados
+		WHERE seq = v_seq;
+		
+		soma := soma - menor_valor;
+		atributos[v_seq] := soma;
+	END LOOP;
+	i:=1;
+	j:=1;
+	LOOP
+	EXIT WHEN i > 6; 	
+		LOOP
+		EXIT WHEN j > 6;
+			IF atributos[i] < atributos[j]
+			THEN
+				aux = atributos[i];
+				atributos[i] = atributos[j];
+				atributos[j] = atributos[i];
+			END IF;
+		j:= j+1;
+		END LOOP;
+	i:= i+1;
+	END LOOP;
+	
+	v_mod_at1		:= FLOOR((atributos[1] - 10)/2);
+	v_mod_at2		:= FLOOR((atributos[2] - 10)/2);
+	v_mod_at3		:= FLOOR((atributos[3] - 10)/2);
+	v_mod_at4		:= FLOOR((atributos[4] - 10)/2);
+	v_mod_at5		:= FLOOR((atributos[5] - 10)/2);
+	v_mod_at6		:= FLOOR((atributos[6] - 10)/2);
+
+	
+	INSERT INTO tb_atributos(jogador,nome_atributo,valor_atributo,mod_atributo)
+	VALUES	(v_jogador,at1,atributos[1],v_mod_at1),
+			(v_jogador,at1,atributos[2],v_mod_at2),
+			(v_jogador,at1,atributos[3],v_mod_at3),
+			(v_jogador,at1,atributos[4],v_mod_at4),
+			(v_jogador,at1,atributos[5],v_mod_at5),
+			(v_jogador,at1,atributos[6],v_mod_at6);
+END
+$$
+LANGUAGE plpgsql;
+
+DROP FUNCTION fn_atributos_decres
+
+---- 3° passo) ESCOLHA SUA RAÇA E SUA CLASSE
+CREATE TABLE tb_raca(
+	raca				VARCHAR(32)	CONSTRAINT pk_raca		PRIMARY KEY,
+	dado_de_vida		INTEGER		CONSTRAINT nn_vida		NOT NULL,
+	modificador_mais	VARCHAR(32)	CONSTRAINT nn_mod_mais	NOT NULL,
+	modificador_menos	VARCHAR(32)	CONSTRAINT nn_mod_menos	NOT NULL,
+	altura_cm			INTEGER[2]	CONSTRAINT nn_altura	NOT NULL,
+	peso_kg				INTEGER[2]	CONSTRAINT nn_peso		NOT NULL,
+	maturidade			INTEGER		CONSTRAINT nn_maturid	NOT NULL,
+	expec_vida			INTEGER		CONSTRAINT nn_expec_vid	NOT NULL,
+	mov_base_metros		INTEGER		CONSTRAINT nn_mov_base	NOT NULL,
+	visao_escuro		INTEGER,
+	visao_penumbra		INTEGER,
+	maos_armas_medias	INTEGER		CONSTRAINT nn_maos_am	NOT NULL,
+	maos_armas_grandes	INTEGER		CONSTRAINT nn_maos_ag	NOT NULL
+);
+DROP TABLE tb_raca CASCADE;
+
+INSERT INTO tb_raca VALUES 	('Humano',10,'escolha','escolha','{160,190}','{55,90}',15,70,9,NULL,NULL,1,1),
+							('Anão',10,'Constituição','Carisma','{130,150}','{50,70}',70,350,6,15,NULL,1,2),
+							('Elfo',8,'Destreza','Constituição','{150,170}','{40,50}',150,700,9,NULL,50,1,1),
+							('Halfling',10,'Destreza','Força','{70,90}','{20,35}',30,70,6,NULL,NULL,2,0);
+							
+CREATE TABLE tb_classe(
+	classe			VARCHAR(32)	CONSTRAINT 	  pk_classe		PRIMARY KEY,
+	dado_de_vida	INTEGER		CONSTRAINT nn_dado_de_vida	NOT NULL,
+	atributo_req_1	VARCHAR(32)	CONSTRAINT nn_atributo_req	NOT NULL,
+	atributo_min_1	INTEGER		CONSTRAINT nn_atributo_min	NOT NULL,
+	atributo_req_2	VARCHAR(32),
+	atributo_min_2	INTEGER
+);
+DROP TABLE tb_classe CASCADE;
+
+INSERT INTO tb_classe VALUES ('Clérigo',8,'sabedoria',14,NULL,NULL),
+							('Homem de Arma - não Elfo',10,'Força',12,'Constituição',12),
+							('Homem de Arma - Elfo',8,'Força',12,'Constituição',12),
+							('Mago',4,'Inteligência',14,NULL,NULL),
+							('Ladrão',6,'Destreza',12,NULL,NULL);
+								
+
+SELECT fn_raca_classe('isabella','joana','Elfo','Ladrão','neutro-bom',50,60,170,'Força','Carisma')
+
+SELECT * FROM tb_atributos;
+
+-- Insira as informações necessárias na função para que o programa recalcule os novos valores da ficha
+CREATE OR REPLACE FUNCTION fn_raca_classe(
+	v_jogador			VARCHAR(64),
+	v_personagem		VARCHAR(64),
+	v_raca				VARCHAR(32),
+	v_classe			VARCHAR(32),
+	v_alinhamento		VARCHAR(64),
+	v_peso				INTEGER,
+	v_idade				INTEGER,
+	v_altura			INTEGER,
+	mod_humano_mais		VARCHAR(32),
+	mod_humano_menos	VARCHAR(32))
+RETURNS text AS
+$$
+DECLARE
+	altura_min			INTEGER;
+	altura_max			INTEGER;
+	peso_min			INTEGER;
+	peso_max			INTEGER;
+	idade_max			INTEGER;
+	v_atributo_req		VARCHAR(32);
+	v_atributo_min		INTEGER;
+BEGIN
+	SELECT altura_cm[1]
+	INTO altura_min
+	FROM tb_raca
+	WHERE raca = v_raca;
+	
+	SELECT altura_cm[2]
+	INTO altura_max
+	FROM tb_raca
+	WHERE raca = v_raca;
+	
+	SELECT peso_kg[1]
+	INTO peso_min
+	FROM tb_raca
+	WHERE raca = v_raca;
+	
+	SELECT peso_kg[2]
+	INTO peso_max
+	FROM tb_raca
+	WHERE raca = v_raca;
+	
+	SELECT expec_vida + 20
+	INTO idade_max
+	FROM tb_raca
+	WHERE raca = v_raca;
+	--verificando se os parâmetros de ALTURA, PESO e IDADE condizem com a RAÇA
+	IF v_altura > altura_max OR v_altura < altura_min
+		THEN RETURN 'Altura inválida: ['||altura_min||' - '||altura_max||']';
+	END IF;
+	IF v_peso > peso_max OR v_peso < peso_min
+		THEN RETURN 'Peso inválido: ['||peso_min||' - '||peso_max||']';
+	END IF;
+	IF v_idade > idade_max
+		THEN RETURN 'Você já está morto';
+	END IF;
+	--Alterando os ATRIBUTOS de acordo com os MODIFICADORES da raça
+	UPDATE tb_atributos
+	SET personagem = v_personagem
+	WHERE jogador = v_jogador;
+	
+	IF v_raca = 'Humano'
+	THEN	
+		UPDATE tb_atributos
+		SET valor_atributo = valor_atributo +2, mod_atributo = mod_atributo +1
+		WHERE nome_atributo = mod_humano_mais AND jogador = v_jogador;
+
+		UPDATE tb_atributos
+		SET valor_atributo = valor_atributo -2, mod_atributo = mod_atributo -1
+		WHERE nome_atributo = mod_humano_menos AND jogador = v_jogador;
+
+	ELSE	
+		UPDATE tb_atributos
+		SET valor_atributo = valor_atributo +2, mod_atributo = mod_atributo +1
+		WHERE nome_atributo = (SELECT r.modificador_mais
+							   FROM tb_raca r
+							  WHERE r.raca = v_raca);
+		UPDATE tb_atributos
+		SET valor_atributo = valor_atributo -2, mod_atributo = mod_atributo -1
+		WHERE nome_atributo = (SELECT r.modificador_menos
+							   FROM tb_raca r
+							  WHERE r.raca = v_raca);
+		END IF;
+	--verificando se possui os ATRIBUTOS necessários para a CLASSE
+	SELECT atributo_req_1, atributo_min_1
+	INTO v_atributo_req, v_atributo_min
+	FROM tb_classe
+	WHERE classe = v_classe;
+	
+	IF (SELECT valor_atributo
+	   FROM tb_atributos
+	   WHERE nome_atributo = v_atributo_req AND personagem = v_personagem) < v_atributo_min
+	THEN RETURN 'O valor do atributo ['||v_atributo_req||'] deve ser maior que '||v_atributo_min||'.';
+	END IF;
+	
+	SELECT atributo_req_2, atributo_min_2
+	INTO v_atributo_req, v_atributo_min
+	FROM tb_classe
+	WHERE classe = v_classe;
+	
+	IF v_classe = 'Homem de Arma - não Elfo' OR v_classe = 'Homem de Arma - Elfo'
+		AND (SELECT valor_atributo
+		     FROM tb_atributos
+		     WHERE nome_atributo = v_atributo_req AND personagem = v_personagem) < v_atributo_min
+	THEN RETURN 'O valor do atributo ['||v_atributo_req||'] deve ser maior que '||v_atributo_min||'.';
+	END IF;
+		
+	-- Inserindo dados na tabela tb_personagem
+	INSERT INTO tb_personagem(personagem,jogador,raca,classe,alinhamento,peso,idade,altura)
+	VALUES(v_personagem,v_jogador,v_raca,v_classe,v_alinhamento,v_peso,v_idade,v_altura);
+
+	-- CRIAR E INSERIR 
+
+	RETURN 'É isso aí!';
+	
+END
+$$
+LANGUAGE plpgsql;
+
+DROP FUNCTION fn_raca_classe;
+
+--Testes
+--valores impossíveis:
+SELECT fn_raca_classe('isabella','joana','Humano','Mago','neutro-bom',80,200,175,NULL,NULL);
+SELECT fn_raca_classe('isabella','joana','Humano','Mago','neutro-bom',280,45,175,NULL,NULL);
+SELECT fn_raca_classe('isabella','joana','Humano','Mago','neutro-bom',80,45,1175,NULL,NULL);
+
+
+SELECT * FROM tb_atributos
+
+---- HABILIDADES
+
+--A função abaixo foi criada para não precisar inserir item por item na tabela
+--No entanto não estava funcionando e o professor também não foi capaz de identificar o erro.
+
+--logo abaixo dela, encontram-se as inserções na tabela e o contínuo do escopo.
+
+CREATE TABLE tb_habilidades(
+	titulo				VARCHAR(64),
+	classe				VARCHAR(64),
+	nivel				INTEGER,
+	nome_habilidade		VARCHAR(64),
+	tipo_de_dado		VARCHAR(12),
+	valor_habilidade	INTEGER
+);
+DROP TABLE tb_habilidades;
+
+
+
+CREATE OR REPLACE FUNCTION fn_habilidades_clerigo()
+RETURNS text[] AS
+$$
+DECLARE
+	ordem_1 INTEGER[17];
+	ordem_2	INTEGER[17];
+	i		INTEGER;
+BEGIN
+	--PREENCHENDO O VETOR PARA QUE ELE FIQUE DA SEGUINTE FORMA:
+	--ordem_1 := ordem_1[0,0,0,0,0,0,0,3,7,11,15,18,20,NULL,NULL,NULL,NULL];
+	--ordem_2 := ordem_2[0,0,0,0,0,0,2,5,9,13,17,19,NULL,NULL,NULL,NULL,NULL];
+	i:= 0;
+	LOOP
+	EXIT WHEN i>6;
+		i:= i+1;
+		ordem_1[i] := 0;
+		ordem_2[i] := 0;
+	END LOOP;
+	ordem_1[7] := 0;
+	ordem_2[7] := 2;
+	ordem_1[8] := 3;
+	ordem_2[8] := 5;
+	i := 7;
+	LOOP
+	EXIT WHEN i>10;
+		i := i+1;
+		ordem_1[i+1] := ordem_1[i] +4;		
+		ordem_2[i+1] := ordem_2[i] +4;		
+	END LOOP;
+	ordem_1[12] := 18;
+	ordem_2[12] := ordem_2[11] +2;
+	
+	i := 13;
+	LOOP
+	EXIT WHEN i>16;
+		i := i+1;
+		ordem_1[i] := NULL;
+		ordem_2[i] := NULL;
+	END LOOP;
+	ordem_1[13] := ordem_1[12] +2;
+	RETURN ordem_2;
+	
+	--inserindo itens na tabela tb_habilidades para a classe 'Clérigo'
+	i:=2;
+	LOOP
+	EXIT WHEN i>20;
+		IF i%2 = 0
+		THEN	INSERT INTO tb_habilidades VALUES  	('Afastar mortos-vivos','Clérigo',i,'Esqueleto','d20 >',	ordem_2[10-i]),
+				('Afastar mortos-vivos','Clérigo',i,'Zumbi','d20 >',		ordem_2[11-i]),
+				('Afastar mortos-vivos','Clérigo',i,'Carniçal','d20 >',		ordem_2[12-i]),
+				('Afastar mortos-vivos','Clérigo',i,'Inumano','d20 >',		ordem_2[13-i]),
+				('Afastar mortos-vivos','Clérigo',i,'Aparição','d20 >',		ordem_2[14-i]),
+				('Afastar mortos-vivos','Clérigo',i,'Mumia','d20 >',		ordem_2[15-i]),
+				('Afastar mortos-vivos','Clérigo',i,'Espectro','d20 >',		ordem_2[16-i]),
+				('Afastar mortos-vivos','Clérigo',i,'Vampiro','d20 >',		ordem_2[17-i]);
+				i:=i+1;
+		ELSE	INSERT INTO tb_habilidades VALUES  	('Afastar mortos-vivos','Clérigo',i,'Esqueleto','d20 >',	ordem_1[10-i]),
+				('Afastar mortos-vivos','Clérigo',i,'Zumbi','d20 >',		ordem_1[11-i]),
+				('Afastar mortos-vivos','Clérigo',i,'Carniçal','d20 >',		ordem_1[12-i]),
+				('Afastar mortos-vivos','Clérigo',i,'Inumano','d20 >',		ordem_1[13-i]),
+				('Afastar mortos-vivos','Clérigo',i,'Aparição','d20 >',		ordem_1[14-i]),
+				('Afastar mortos-vivos','Clérigo',i,'Mumia','d20 >',		ordem_1[15-i]),
+				('Afastar mortos-vivos','Clérigo',i,'Espectro','d20 >',		ordem_1[16-i]),
+				('Afastar mortos-vivos','Clérigo',i,'Vampiro','d20 >',		ordem_1[17-i]);
+				i:=i+1;
+		END IF;
+	END LOOP;
+END
+$$
+LANGUAGE plpgsql;
+
+SELECT fn_habilidades_clerigo();
+
+DROP FUNCTION fn_habilidades_clerigo();
+
+SELECT * FROM tb_habilidades;									
+
+									
+---- HABILIDADES									
+									
+INSERT INTO tb_habilidades VALUES  	('Afastar mortos-vivos','Clérigo',1,'Esqueleto','d20 >',	13),
+									('Afastar mortos-vivos','Clérigo',1,'Zumbi','d20 >',		17),
+									('Afastar mortos-vivos','Clérigo',1,'Carniçal','d20 >',	19),
+									('Afastar mortos-vivos','Clérigo',1,'Inumano','d20 >',	NULL),
+									('Afastar mortos-vivos','Clérigo',1,'Aparição','d20 >',	NULL),
+									('Afastar mortos-vivos','Clérigo',1,'Mumia','d20 >',		NULL),
+									('Afastar mortos-vivos','Clérigo',1,'Espectro','d20 >',	NULL),
+									('Afastar mortos-vivos','Clérigo',1,'Vampiro','d20 >',	NULL);									
+																	
+									
+INSERT INTO tb_habilidades VALUES  	('Afastar mortos-vivos','Clérigo',2,'Esqueleto','d20 >',	11),
+									('Afastar mortos-vivos','Clérigo',2,'Zumbi','d20 >',		15),
+									('Afastar mortos-vivos','Clérigo',2,'Carniçal','d20 >',		18),
+									('Afastar mortos-vivos','Clérigo',2,'Inumano','d20 >',		20),
+									('Afastar mortos-vivos','Clérigo',2,'Aparição','d20 >',		NULL),
+									('Afastar mortos-vivos','Clérigo',2,'Mumia','d20 >',		NULL),
+									('Afastar mortos-vivos','Clérigo',2,'Espectro','d20 >',		NULL),
+									('Afastar mortos-vivos','Clérigo',2,'Vampiro','d20 >',		NULL);
+									
+INSERT INTO tb_habilidades VALUES  	('Afastar mortos-vivos','Clérigo',3,'Esqueleto','d20 >',	9),
+									('Afastar mortos-vivos','Clérigo',3,'Zumbi','d20 >',		13),
+									('Afastar mortos-vivos','Clérigo',3,'Carniçal','d20 >',	17),
+									('Afastar mortos-vivos','Clérigo',3,'Inumano','d20 >',		19),
+									('Afastar mortos-vivos','Clérigo',3,'Aparição','d20 >',		NULL),
+									('Afastar mortos-vivos','Clérigo',3,'Mumia','d20 >',		NULL),
+									('Afastar mortos-vivos','Clérigo',3,'Espectro','d20 >',		NULL),
+									('Afastar mortos-vivos','Clérigo',3,'Vampiro','d20 >',		NULL);
+									
+INSERT INTO tb_habilidades VALUES  	('Afastar mortos-vivos','Clérigo',4,'Esqueleto','d20 >',	7),
+									('Afastar mortos-vivos','Clérigo',4,'Zumbi','d20 >',		11),
+									('Afastar mortos-vivos','Clérigo',4,'Carniçal','d20 >',		15),
+									('Afastar mortos-vivos','Clérigo',4,'Inumano','d20 >',		18),
+									('Afastar mortos-vivos','Clérigo',4,'Aparição','d20 >',		20),
+									('Afastar mortos-vivos','Clérigo',4,'Mumia','d20 >',		NULL),
+									('Afastar mortos-vivos','Clérigo',4,'Espectro','d20 >',		NULL),
+									('Afastar mortos-vivos','Clérigo',4,'Vampiro','d20 >',		NULL);
+									
+INSERT INTO tb_habilidades VALUES  	('Afastar mortos-vivos','Clérigo',5,'Esqueleto','d20 >',	5),
+									('Afastar mortos-vivos','Clérigo',5,'Zumbi','d20 >',		9),
+									('Afastar mortos-vivos','Clérigo',5,'Carniçal','d20 >',		13),
+									('Afastar mortos-vivos','Clérigo',5,'Inumano','d20 >',		17),
+									('Afastar mortos-vivos','Clérigo',5,'Aparição','d20 >',		19),
+									('Afastar mortos-vivos','Clérigo',5,'Mumia','d20 >',		NULL),
+									('Afastar mortos-vivos','Clérigo',5,'Espectro','d20 >',		NULL),
+									('Afastar mortos-vivos','Clérigo',5,'Vampiro','d20 >',		NULL);
+									
+INSERT INTO tb_habilidades VALUES  	('Afastar mortos-vivos','Clérigo',6,'Esqueleto','d20 >',	3),
+									('Afastar mortos-vivos','Clérigo',6,'Zumbi','d20 >',		7),
+									('Afastar mortos-vivos','Clérigo',6,'Carniçal','d20 >',		11),
+									('Afastar mortos-vivos','Clérigo',6,'Inumano','d20 >',		15),
+									('Afastar mortos-vivos','Clérigo',6,'Aparição','d20 >',		18),
+									('Afastar mortos-vivos','Clérigo',6,'Mumia','d20 >',		20),
+									('Afastar mortos-vivos','Clérigo',6,'Espectro','d20 >',		NULL),
+									('Afastar mortos-vivos','Clérigo',6,'Vampiro','d20 >',		NULL);
+									
+INSERT INTO tb_habilidades VALUES  	('Afastar mortos-vivos','Clérigo',7,'Esqueleto','d20 >',	0),
+									('Afastar mortos-vivos','Clérigo',7,'Zumbi','d20 >',		5),
+									('Afastar mortos-vivos','Clérigo',7,'Carniçal','d20 >',		9),
+									('Afastar mortos-vivos','Clérigo',7,'Inumano','d20 >',		13),
+									('Afastar mortos-vivos','Clérigo',7,'Aparição','d20 >',		17),
+									('Afastar mortos-vivos','Clérigo',7,'Mumia','d20 >',		19),
+									('Afastar mortos-vivos','Clérigo',7,'Espectro','d20 >',		NULL),
+									('Afastar mortos-vivos','Clérigo',7,'Vampiro','d20 >',		NULL);
+									
+INSERT INTO tb_habilidades VALUES  	('Afastar mortos-vivos','Clérigo',8,'Esqueleto','d20 >',	0),
+									('Afastar mortos-vivos','Clérigo',8,'Zumbi','d20 >',		3),
+									('Afastar mortos-vivos','Clérigo',8,'Carniçal','d20 >',		7),
+									('Afastar mortos-vivos','Clérigo',8,'Inumano','d20 >',		11),
+									('Afastar mortos-vivos','Clérigo',8,'Aparição','d20 >',		15),
+									('Afastar mortos-vivos','Clérigo',8,'Mumia','d20 >',		18),
+									('Afastar mortos-vivos','Clérigo',8,'Espectro','d20 >',		20),
+									('Afastar mortos-vivos','Clérigo',8,'Vampiro','d20 >',		NULL);
+									
+INSERT INTO tb_habilidades VALUES  	('Afastar mortos-vivos','Clérigo',9,'Esqueleto','d20 >',	0),
+									('Afastar mortos-vivos','Clérigo',9,'Zumbi','d20 >',		2),
+									('Afastar mortos-vivos','Clérigo',9,'Carniçal','d20 >',		5),
+									('Afastar mortos-vivos','Clérigo',9,'Inumano','d20 >',		9),
+									('Afastar mortos-vivos','Clérigo',9,'Aparição','d20 >',		13),
+									('Afastar mortos-vivos','Clérigo',9,'Mumia','d20 >',		17),
+									('Afastar mortos-vivos','Clérigo',9,'Espectro','d20 >',		19),
+									('Afastar mortos-vivos','Clérigo',9,'Vampiro','d20 >',		NULL);
+									
+INSERT INTO tb_habilidades VALUES  	('Afastar mortos-vivos','Clérigo',10,'Esqueleto','d20 >',	-1),
+									('Afastar mortos-vivos','Clérigo',10,'Zumbi','d20 >',		0),
+									('Afastar mortos-vivos','Clérigo',10,'Carniçal','d20 >',	3),
+									('Afastar mortos-vivos','Clérigo',10,'Inumano','d20 >',		7),
+									('Afastar mortos-vivos','Clérigo',10,'Aparição','d20 >',	11),
+									('Afastar mortos-vivos','Clérigo',10,'Mumia','d20 >',		15),
+									('Afastar mortos-vivos','Clérigo',10,'Espectro','d20 >',	18),
+									('Afastar mortos-vivos','Clérigo',10,'Vampiro','d20 >',		20);
+									
+INSERT INTO tb_habilidades VALUES  	('Afastar mortos-vivos','Clérigo',11,'Esqueleto','d20 >',	-1),
+									('Afastar mortos-vivos','Clérigo',11,'Zumbi','d20 >',		0),
+									('Afastar mortos-vivos','Clérigo',11,'Carniçal','d20 >',	2),
+									('Afastar mortos-vivos','Clérigo',11,'Inumano','d20 >',		5),
+									('Afastar mortos-vivos','Clérigo',11,'Aparição','d20 >',	9),
+									('Afastar mortos-vivos','Clérigo',11,'Mumia','d20 >',		13),
+									('Afastar mortos-vivos','Clérigo',11,'Espectro','d20 >',	17),
+									('Afastar mortos-vivos','Clérigo',11,'Vampiro','d20 >',		19);
+									
+INSERT INTO tb_habilidades VALUES  	('Afastar mortos-vivos','Clérigo',12,'Esqueleto','d20 >',	-1),
+									('Afastar mortos-vivos','Clérigo',12,'Zumbi','d20 >',		0),
+									('Afastar mortos-vivos','Clérigo',12,'Carniçal','d20 >',	0),
+									('Afastar mortos-vivos','Clérigo',12,'Inumano','d20 >',		3),
+									('Afastar mortos-vivos','Clérigo',12,'Aparição','d20 >',	7),
+									('Afastar mortos-vivos','Clérigo',12,'Mumia','d20 >',		11),
+									('Afastar mortos-vivos','Clérigo',12,'Espectro','d20 >',	15),
+									('Afastar mortos-vivos','Clérigo',12,'Vampiro','d20 >',		18);
+									
+INSERT INTO tb_habilidades VALUES  	('Afastar mortos-vivos','Clérigo',13,'Esqueleto','d20 >',	-1),
+									('Afastar mortos-vivos','Clérigo',13,'Zumbi','d20 >',		-1),
+									('Afastar mortos-vivos','Clérigo',13,'Carniçal','d20 >',	0),
+									('Afastar mortos-vivos','Clérigo',13,'Inumano','d20 >',		2),
+									('Afastar mortos-vivos','Clérigo',13,'Aparição','d20 >',	5),
+									('Afastar mortos-vivos','Clérigo',13,'Mumia','d20 >',		9),
+									('Afastar mortos-vivos','Clérigo',13,'Espectro','d20 >',	13),
+									('Afastar mortos-vivos','Clérigo',13,'Vampiro','d20 >',		17);
+									
+INSERT INTO tb_habilidades VALUES  	('Afastar mortos-vivos','Clérigo',14,'Esqueleto','d20 >',	-1),
+									('Afastar mortos-vivos','Clérigo',14,'Zumbi','d20 >',		-1),
+									('Afastar mortos-vivos','Clérigo',14,'Carniçal','d20 >',	0),
+									('Afastar mortos-vivos','Clérigo',14,'Inumano','d20 >',		0),
+									('Afastar mortos-vivos','Clérigo',14,'Aparição','d20 >',	3),
+									('Afastar mortos-vivos','Clérigo',14,'Mumia','d20 >',		7),
+									('Afastar mortos-vivos','Clérigo',14,'Espectro','d20 >',	11),
+									('Afastar mortos-vivos','Clérigo',14,'Vampiro','d20 >',		15);
+									
+INSERT INTO tb_habilidades VALUES  	('Afastar mortos-vivos','Clérigo',15,'Esqueleto','d20 >',	-1),
+									('Afastar mortos-vivos','Clérigo',15,'Zumbi','d20 >',		-1),
+									('Afastar mortos-vivos','Clérigo',15,'Carniçal','d20 >',	-1),
+									('Afastar mortos-vivos','Clérigo',15,'Inumano','d20 >',		0),
+									('Afastar mortos-vivos','Clérigo',15,'Aparição','d20 >',	2),
+									('Afastar mortos-vivos','Clérigo',15,'Mumia','d20 >',		5),
+									('Afastar mortos-vivos','Clérigo',15,'Espectro','d20 >',	9),
+									('Afastar mortos-vivos','Clérigo',15,'Vampiro','d20 >',		13);
+									
+INSERT INTO tb_habilidades VALUES  	('Afastar mortos-vivos','Clérigo',16,'Esqueleto','d20 >',	-1),
+									('Afastar mortos-vivos','Clérigo',16,'Zumbi','d20 >',		-1),
+									('Afastar mortos-vivos','Clérigo',16,'Carniçal','d20 >',	-1),
+									('Afastar mortos-vivos','Clérigo',16,'Inumano','d20 >',		0),
+									('Afastar mortos-vivos','Clérigo',16,'Aparição','d20 >',	0),
+									('Afastar mortos-vivos','Clérigo',16,'Mumia','d20 >',		3),
+									('Afastar mortos-vivos','Clérigo',16,'Espectro','d20 >',	7),
+									('Afastar mortos-vivos','Clérigo',16,'Vampiro','d20 >',		11);
+									
+INSERT INTO tb_habilidades VALUES  	('Afastar mortos-vivos','Clérigo',17,'Esqueleto','d20 >',	-1),
+									('Afastar mortos-vivos','Clérigo',17,'Zumbi','d20 >',		-1),
+									('Afastar mortos-vivos','Clérigo',17,'Carniçal','d20 >',	-1),
+									('Afastar mortos-vivos','Clérigo',17,'Inumano','d20 >',		-1),
+									('Afastar mortos-vivos','Clérigo',17,'Aparição','d20 >',	0),
+									('Afastar mortos-vivos','Clérigo',17,'Mumia','d20 >',		2),
+									('Afastar mortos-vivos','Clérigo',17,'Espectro','d20 >',	5),
+									('Afastar mortos-vivos','Clérigo',17,'Vampiro','d20 >',		9);
+									
+INSERT INTO tb_habilidades VALUES  	('Afastar mortos-vivos','Clérigo',18,'Esqueleto','d20 >',	-1),
+									('Afastar mortos-vivos','Clérigo',18,'Zumbi','d20 >',		-1),
+									('Afastar mortos-vivos','Clérigo',18,'Carniçal','d20 >',	-1),
+									('Afastar mortos-vivos','Clérigo',18,'Inumano','d20 >',		-1),
+									('Afastar mortos-vivos','Clérigo',18,'Aparição','d20 >',	0),
+									('Afastar mortos-vivos','Clérigo',18,'Mumia','d20 >',		0),
+									('Afastar mortos-vivos','Clérigo',18,'Espectro','d20 >',	3),
+									('Afastar mortos-vivos','Clérigo',18,'Vampiro','d20 >',		7);
+									
+INSERT INTO tb_habilidades VALUES  	('Afastar mortos-vivos','Clérigo',19,'Esqueleto','d20 >',	-1),
+									('Afastar mortos-vivos','Clérigo',19,'Zumbi','d20 >',		-1),
+									('Afastar mortos-vivos','Clérigo',19,'Carniçal','d20 >',	-1),
+									('Afastar mortos-vivos','Clérigo',19,'Inumano','d20 >',		-1),
+									('Afastar mortos-vivos','Clérigo',19,'Aparição','d20 >',	-1),
+									('Afastar mortos-vivos','Clérigo',19,'Mumia','d20 >',		0),
+									('Afastar mortos-vivos','Clérigo',19,'Espectro','d20 >',	2),
+									('Afastar mortos-vivos','Clérigo',19,'Vampiro','d20 >',		5);
+									
+INSERT INTO tb_habilidades VALUES  	('Afastar mortos-vivos','Clérigo',20,'Esqueleto','d20 >',	-1),
+									('Afastar mortos-vivos','Clérigo',20,'Zumbi','d20 >',		-1),
+									('Afastar mortos-vivos','Clérigo',20,'Carniçal','d20 >',	-1),
+									('Afastar mortos-vivos','Clérigo',20,'Inumano','d20 >',		-1),
+									('Afastar mortos-vivos','Clérigo',20,'Aparição','d20 >',	-1),
+									('Afastar mortos-vivos','Clérigo',20,'Mumia','d20 >',		0),
+									('Afastar mortos-vivos','Clérigo',20,'Espectro','d20 >',	0),
+									('Afastar mortos-vivos','Clérigo',20,'Vampiro','d20 >',		3);
+									
+INSERT INTO tb_habilidades VALUES	('Talentos de Ladrão','Ladrão',1,'Abrir Fechaduras','d100 <',		15),
+					('Talentos de Ladrão','Ladrão',1,'Reconhecer e desarmar armadilhas','d100 <',		20),
+					('Talentos de Ladrão','Ladrão',1,'Escalar muros','d100 <',							80),
+					('Talentos de Ladrão','Ladrão',1,'Mover-se em silêncio','d100 <',					20),
+					('Talentos de Ladrão','Ladrão',1,'Esconder-se nas sombras','d100 <',				10),
+					('Talentos de Ladrão','Ladrão',1,'Pungar','d100 <',									20),
+					('Talentos de Ladrão','Ladrão',1,'Ouvir barulhos','d6 <',							2),
+					('Talentos de Ladrão','Ladrão',1,'Ataque pelas costas','Bônus (x)',					2);
+
+INSERT INTO tb_habilidades VALUES	('Talentos de Ladrão','Ladrão',2,'Abrir Fechaduras','d100 <',		20),
+					('Talentos de Ladrão','Ladrão',2,'Reconhecer e desarmar armadilhas','d100 <',		25),
+					('Talentos de Ladrão','Ladrão',2,'Escalar muros','d100 <',							81),
+					('Talentos de Ladrão','Ladrão',2,'Mover-se em silêncio','d100 <',					25),
+					('Talentos de Ladrão','Ladrão',2,'Esconder-se nas sombras','d100 <',				15),
+					('Talentos de Ladrão','Ladrão',2,'Pungar','d100 <',									25),
+					('Talentos de Ladrão','Ladrão',2,'Ouvir barulhos','d6 <',							2),
+					('Talentos de Ladrão','Ladrão',2,'Ataque pelas costas','Bônus (x)',					2);
+
+INSERT INTO tb_habilidades VALUES	('Talentos de Ladrão','Ladrão',3,'Abrir Fechaduras','d100 <',		25),
+					('Talentos de Ladrão','Ladrão',3,'Reconhecer e desarmar armadilhas','d100 <',		30),
+					('Talentos de Ladrão','Ladrão',3,'Escalar muros','d100 <',							82),
+					('Talentos de Ladrão','Ladrão',3,'Mover-se em silêncio','d100 <',					30),
+					('Talentos de Ladrão','Ladrão',3,'Esconder-se nas sombras','d100 <',				20),
+					('Talentos de Ladrão','Ladrão',3,'Pungar','d100 <',									30),
+					('Talentos de Ladrão','Ladrão',3,'Ouvir barulhos','d6 <',							2),
+					('Talentos de Ladrão','Ladrão',3,'Ataque pelas costas','Bônus (x)',					2);
+
+INSERT INTO tb_habilidades VALUES	('Talentos de Ladrão','Ladrão',4,'Abrir Fechaduras','d100 <',		30),
+					('Talentos de Ladrão','Ladrão',4,'Reconhecer e desarmar armadilhas','d100 <',		35),
+					('Talentos de Ladrão','Ladrão',4,'Escalar muros','d100 <',							83),
+					('Talentos de Ladrão','Ladrão',4,'Mover-se em silêncio','d100 <',					35),
+					('Talentos de Ladrão','Ladrão',4,'Esconder-se nas sombras','d100 <',				25),
+					('Talentos de Ladrão','Ladrão',4,'Pungar','d100 <',									35),
+					('Talentos de Ladrão','Ladrão',4,'Ouvir barulhos','d6 <',							2),
+					('Talentos de Ladrão','Ladrão',4,'Ataque pelas costas','Bônus (x)',					2);
+
+INSERT INTO tb_habilidades VALUES	('Talentos de Ladrão','Ladrão',5,'Abrir Fechaduras','d100 <',		35),
+					('Talentos de Ladrão','Ladrão',5,'Reconhecer e desarmar armadilhas','d100 <',		40),
+					('Talentos de Ladrão','Ladrão',5,'Escalar muros','d100 <',							84),
+					('Talentos de Ladrão','Ladrão',5,'Mover-se em silêncio','d100 <',					40),
+					('Talentos de Ladrão','Ladrão',5,'Esconder-se nas sombras','d100 <',				30),
+					('Talentos de Ladrão','Ladrão',5,'Pungar','d100 <',									40),
+					('Talentos de Ladrão','Ladrão',5,'Ouvir barulhos','d6 <',							3),
+					('Talentos de Ladrão','Ladrão',5,'Ataque pelas costas','Bônus (x)',					2);
+
+INSERT INTO tb_habilidades VALUES	('Talentos de Ladrão','Ladrão',6,'Abrir Fechaduras','d100 <',		40),
+					('Talentos de Ladrão','Ladrão',6,'Reconhecer e desarmar armadilhas','d100 <',		45),
+					('Talentos de Ladrão','Ladrão',6,'Escalar muros','d100 <',							85),
+					('Talentos de Ladrão','Ladrão',6,'Mover-se em silêncio','d100 <',					45),
+					('Talentos de Ladrão','Ladrão',6,'Esconder-se nas sombras','d100 <',				35),
+					('Talentos de Ladrão','Ladrão',6,'Pungar','d100 <',									45),
+					('Talentos de Ladrão','Ladrão',6,'Ouvir barulhos','d6 <',							3),
+					('Talentos de Ladrão','Ladrão',6,'Ataque pelas costas','Bônus (x)',					3);
+
+INSERT INTO tb_habilidades VALUES	('Talentos de Ladrão','Ladrão',7,'Abrir Fechaduras','d100 <',		45),
+					('Talentos de Ladrão','Ladrão',7,'Reconhecer e desarmar armadilhas','d100 <',		50),
+					('Talentos de Ladrão','Ladrão',7,'Escalar muros','d100 <',							86),
+					('Talentos de Ladrão','Ladrão',7,'Mover-se em silêncio','d100 <',					50),
+					('Talentos de Ladrão','Ladrão',7,'Esconder-se nas sombras','d100 <',				40),
+					('Talentos de Ladrão','Ladrão',7,'Pungar','d100 <',									50),
+					('Talentos de Ladrão','Ladrão',7,'Ouvir barulhos','d6 <',							3),
+					('Talentos de Ladrão','Ladrão',7,'Ataque pelas costas','Bônus (x)',					3);
+
+INSERT INTO tb_habilidades VALUES	('Talentos de Ladrão','Ladrão',8,'Abrir Fechaduras','d100 <',		50),
+					('Talentos de Ladrão','Ladrão',8,'Reconhecer e desarmar armadilhas','d100 <',		55),
+					('Talentos de Ladrão','Ladrão',8,'Escalar muros','d100 <',							87),
+					('Talentos de Ladrão','Ladrão',8,'Mover-se em silêncio','d100 <',					55),
+					('Talentos de Ladrão','Ladrão',8,'Esconder-se nas sombras','d100 <',				45),
+					('Talentos de Ladrão','Ladrão',8,'Pungar','d100 <',									55),
+					('Talentos de Ladrão','Ladrão',8,'Ouvir barulhos','d6 <',							3),
+					('Talentos de Ladrão','Ladrão',8,'Ataque pelas costas','Bônus (x)',					3);
+
+INSERT INTO tb_habilidades VALUES	('Talentos de Ladrão','Ladrão',9,'Abrir Fechaduras','d100 <',		55),
+					('Talentos de Ladrão','Ladrão',9,'Reconhecer e desarmar armadilhas','d100 <',		60),
+					('Talentos de Ladrão','Ladrão',9,'Escalar muros','d100 <',							88),
+					('Talentos de Ladrão','Ladrão',9,'Mover-se em silêncio','d100 <',					60),
+					('Talentos de Ladrão','Ladrão',9,'Esconder-se nas sombras','d100 <',				50),
+					('Talentos de Ladrão','Ladrão',9,'Pungar','d100 <',									60),
+					('Talentos de Ladrão','Ladrão',9,'Ouvir barulhos','d6 <',							3),
+					('Talentos de Ladrão','Ladrão',9,'Ataque pelas costas','Bônus (x)',					3);
+
+INSERT INTO tb_habilidades VALUES	('Talentos de Ladrão','Ladrão',10,'Abrir Fechaduras','d100 <',		60),
+					('Talentos de Ladrão','Ladrão',10,'Reconhecer e desarmar armadilhas','d100 <',		62),
+					('Talentos de Ladrão','Ladrão',10,'Escalar muros','d100 <',							89),
+					('Talentos de Ladrão','Ladrão',10,'Mover-se em silêncio','d100 <',					65),
+					('Talentos de Ladrão','Ladrão',10,'Esconder-se nas sombras','d100 <',				55),
+					('Talentos de Ladrão','Ladrão',10,'Pungar','d100 <',								65),
+					('Talentos de Ladrão','Ladrão',10,'Ouvir barulhos','d6 <',							4),
+					('Talentos de Ladrão','Ladrão',10,'Ataque pelas costas','Bônus (x)',				3);
+
+INSERT INTO tb_habilidades VALUES	('Talentos de Ladrão','Ladrão',11,'Abrir Fechaduras','d100 <',		62),
+					('Talentos de Ladrão','Ladrão',11,'Reconhecer e desarmar armadilhas','d100 <',		64),
+					('Talentos de Ladrão','Ladrão',11,'Escalar muros','d100 <',							90),
+					('Talentos de Ladrão','Ladrão',11,'Mover-se em silêncio','d100 <',					70),
+					('Talentos de Ladrão','Ladrão',11,'Esconder-se nas sombras','d100 <',				60),
+					('Talentos de Ladrão','Ladrão',11,'Pungar','d100 <',								70),
+					('Talentos de Ladrão','Ladrão',11,'Ouvir barulhos','d6 <',							4),
+					('Talentos de Ladrão','Ladrão',11,'Ataque pelas costas','Bônus (x)',				3);
+
+INSERT INTO tb_habilidades VALUES	('Talentos de Ladrão','Ladrão',12,'Abrir Fechaduras','d100 <',		64),
+					('Talentos de Ladrão','Ladrão',12,'Reconhecer e desarmar armadilhas','d100 <',		66),
+					('Talentos de Ladrão','Ladrão',12,'Escalar muros','d100 <',							91),
+					('Talentos de Ladrão','Ladrão',12,'Mover-se em silêncio','d100 <',					72),
+					('Talentos de Ladrão','Ladrão',12,'Esconder-se nas sombras','d100 <',				62),
+					('Talentos de Ladrão','Ladrão',12,'Pungar','d100 <',								72),
+					('Talentos de Ladrão','Ladrão',12,'Ouvir barulhos','d6 <',							4),
+					('Talentos de Ladrão','Ladrão',12,'Ataque pelas costas','Bônus (x)',				4);
+
+INSERT INTO tb_habilidades VALUES	('Talentos de Ladrão','Ladrão',13,'Abrir Fechaduras','d100 <',		66),
+					('Talentos de Ladrão','Ladrão',13,'Reconhecer e desarmar armadilhas','d100 <',		68),
+					('Talentos de Ladrão','Ladrão',13,'Escalar muros','d100 <',							92),
+					('Talentos de Ladrão','Ladrão',13,'Mover-se em silêncio','d100 <',					74),
+					('Talentos de Ladrão','Ladrão',13,'Esconder-se nas sombras','d100 <',				64),
+					('Talentos de Ladrão','Ladrão',13,'Pungar','d100 <',								74),
+					('Talentos de Ladrão','Ladrão',13,'Ouvir barulhos','d6 <',							4),
+					('Talentos de Ladrão','Ladrão',13,'Ataque pelas costas','Bônus (x)',				4);
+
+INSERT INTO tb_habilidades VALUES	('Talentos de Ladrão','Ladrão',14,'Abrir Fechaduras','d100 <',		68),
+					('Talentos de Ladrão','Ladrão',14,'Reconhecer e desarmar armadilhas','d100 <',		70),
+					('Talentos de Ladrão','Ladrão',14,'Escalar muros','d100 <',							93),
+					('Talentos de Ladrão','Ladrão',14,'Mover-se em silêncio','d100 <',					76),
+					('Talentos de Ladrão','Ladrão',14,'Esconder-se nas sombras','d100 <',				66),
+					('Talentos de Ladrão','Ladrão',14,'Pungar','d100 <',								76),
+					('Talentos de Ladrão','Ladrão',14,'Ouvir barulhos','d6 <',							4),
+					('Talentos de Ladrão','Ladrão',14,'Ataque pelas costas','Bônus (x)',				4);
+
+INSERT INTO tb_habilidades VALUES	('Talentos de Ladrão','Ladrão',15,'Abrir Fechaduras','d100 <',		70),
+					('Talentos de Ladrão','Ladrão',15,'Reconhecer e desarmar armadilhas','d100 <',		72),
+					('Talentos de Ladrão','Ladrão',15,'Escalar muros','d100 <',							94),
+					('Talentos de Ladrão','Ladrão',15,'Mover-se em silêncio','d100 <',					78),
+					('Talentos de Ladrão','Ladrão',15,'Esconder-se nas sombras','d100 <',				68),
+					('Talentos de Ladrão','Ladrão',15,'Pungar','d100 <',								78),
+					('Talentos de Ladrão','Ladrão',15,'Ouvir barulhos','d6 <',							4),
+					('Talentos de Ladrão','Ladrão',15,'Ataque pelas costas','Bônus (x)',				4);
+
+INSERT INTO tb_habilidades VALUES	('Talentos de Ladrão','Ladrão',16,'Abrir Fechaduras','d100 <',		72),
+					('Talentos de Ladrão','Ladrão',16,'Reconhecer e desarmar armadilhas','d100 <',		74),
+					('Talentos de Ladrão','Ladrão',16,'Escalar muros','d100 <',							95),
+					('Talentos de Ladrão','Ladrão',16,'Mover-se em silêncio','d100 <',					80),
+					('Talentos de Ladrão','Ladrão',16,'Esconder-se nas sombras','d100 <',				70),
+					('Talentos de Ladrão','Ladrão',16,'Pungar','d100 <',								80),
+					('Talentos de Ladrão','Ladrão',16,'Ouvir barulhos','d6 <',							5),
+					('Talentos de Ladrão','Ladrão',16,'Ataque pelas costas','Bônus (x)',				4);
+
+INSERT INTO tb_habilidades VALUES	('Talentos de Ladrão','Ladrão',17,'Abrir Fechaduras','d100 <',		74),
+					('Talentos de Ladrão','Ladrão',17,'Reconhecer e desarmar armadilhas','d100 <',		76),
+					('Talentos de Ladrão','Ladrão',17,'Escalar muros','d100 <',							96),
+					('Talentos de Ladrão','Ladrão',17,'Mover-se em silêncio','d100 <',					82),
+					('Talentos de Ladrão','Ladrão',17,'Esconder-se nas sombras','d100 <',				72),
+					('Talentos de Ladrão','Ladrão',17,'Pungar','d100 <',								82),
+					('Talentos de Ladrão','Ladrão',17,'Ouvir barulhos','d6 <',							5),
+					('Talentos de Ladrão','Ladrão',17,'Ataque pelas costas','Bônus (x)',				4);
+
+INSERT INTO tb_habilidades VALUES	('Talentos de Ladrão','Ladrão',18,'Abrir Fechaduras','d100 <',		76),
+					('Talentos de Ladrão','Ladrão',18,'Reconhecer e desarmar armadilhas','d100 <',		78),
+					('Talentos de Ladrão','Ladrão',18,'Escalar muros','d100 <',							97),
+					('Talentos de Ladrão','Ladrão',18,'Mover-se em silêncio','d100 <',					84),
+					('Talentos de Ladrão','Ladrão',18,'Esconder-se nas sombras','d100 <',				74),
+					('Talentos de Ladrão','Ladrão',18,'Pungar','d100 <',								84),
+					('Talentos de Ladrão','Ladrão',18,'Ouvir barulhos','d6 <',							5),
+					('Talentos de Ladrão','Ladrão',18,'Ataque pelas costas','Bônus (x)',				5);
+
+INSERT INTO tb_habilidades VALUES	('Talentos de Ladrão','Ladrão',19,'Abrir Fechaduras','d100 <',		78),
+					('Talentos de Ladrão','Ladrão',19,'Reconhecer e desarmar armadilhas','d100 <',		80),
+					('Talentos de Ladrão','Ladrão',19,'Escalar muros','d100 <',							98),
+					('Talentos de Ladrão','Ladrão',19,'Mover-se em silêncio','d100 <',					86),
+					('Talentos de Ladrão','Ladrão',19,'Esconder-se nas sombras','d100 <',				76),
+					('Talentos de Ladrão','Ladrão',19,'Pungar','d100 <',								86),
+					('Talentos de Ladrão','Ladrão',19,'Ouvir barulhos','d6 <',							5),
+					('Talentos de Ladrão','Ladrão',19,'Ataque pelas costas','Bônus (x)',				5);
+
+INSERT INTO tb_habilidades VALUES	('Talentos de Ladrão','Ladrão',20,'Abrir Fechaduras','d100 <',		80),
+					('Talentos de Ladrão','Ladrão',20,'Reconhecer e desarmar armadilhas','d100 <',		82),
+					('Talentos de Ladrão','Ladrão',20,'Escalar muros','d100 <',							99),
+					('Talentos de Ladrão','Ladrão',20,'Mover-se em silêncio','d100 <',					88),
+					('Talentos de Ladrão','Ladrão',20,'Esconder-se nas sombras','d100 <',				78),
+					('Talentos de Ladrão','Ladrão',20,'Pungar','d100 <',								88),
+					('Talentos de Ladrão','Ladrão',20,'Ouvir barulhos','d6 <',							5),
+					('Talentos de Ladrão','Ladrão',20,'Ataque pelas costas','Bônus (x)',				5);
+					
+SELECT * FROM tb_habilidades WHERE nivel = 3;
+
+CREATE TABLE tb_habilidades_personagem(
+	personagem			VARCHAR(64),
+	titulo				VARCHAR(64),
+	nivel				INTEGER,
+	nome_habilidade		VARCHAR(64),
+	tipo_de_dado		VARCHAR(5),
+	valor_habilidade	INTEGER,
+		CONSTRAINT fk_personagem FOREIGN KEY(personagem)
+		REFERENCES tb_personagem(personagem)
+);
+DROP TABLE tb_habilidades_personagem;
+
+CREATE OR REPLACE FUNCTION fn_habilidades_personagem(
+	v_personagem	VARCHAR(64))
+RETURNS text AS
+$$
+BEGIN
+	INSERT INTO tb_hab_personagem(personagem,nivel) VALUES (
+	SELECT p.personagem,p.nivel
+	FROM tb_personagem p
+	WHERE p.personagem = v_personagem);
+		
+	RETURN	'é isso aí';
+	
+END
+$$
+LANGUAGE plpgsql;
+
+DROP FUNCTION fn_habilidades_personagem;
+
+SELECT fn_habilidades_personagem('joana');
+
+SELECT p.personagem, h.titulo, p.nivel, h.nome_habilidade, h.tipo_de_dado, h.valor_habilidade
+--INTO tb_habilidades_personagem(personagem, titulo, nome_habilidade, tipo_de_dado, valor_habilidade)
+FROM tb_personagem p
+INNER JOIN tb_habilidades h ON p.personagem = 'joana' AND p.classe = h.classe AND p.nivel = h.nivel;
+
+
+
+-- Função para acrescentar xp
+CREATE OR REPLACE FUNCTION fn_xp(
+	v_jogador		VARCHAR(64),
+	v_xp			INTEGER
+)
+RETURNS text AS
+$$
+DECLARE
+	m_xp	INTEGER;
+BEGIN
+	SELECT xp
+	INTO m_xp
+	FROM tb_personagem;
+	
+	m_xp := m_xp + v_xp;
+	
+	UPDATE tb_personagem
+	SET xp = m_xp
+	WHERE jogador = v_jogador;
+	RETURN 'O jogador '||v_jogador||' recebeu '||v_xp||' pontos de experiência e ficou com um total de'||m_xp||' pontos.';
+END
+$$
+LANGUAGE plpgsql;
+
+Select fn_xp('isabella',50)
+
+select * from tb_personagem
+
+
+---- TRIGGER
+-- Função para que o Mestre do jogo tenha controle das alterações feitas nas fichas dos personagens
+
+
+CREATE TABLE tb_personagem_auditoria(
+    operacao	CHAR			CONSTRAINT nn_operacao	NOT NULL,
+    usuario	VARCHAR(64)	CONSTRAINT nn_usuario	NOT NULL,
+    dt_hr		TIMESTAMP		CONSTRAINT nn_dt_hr		NOT NULL,
+   	jogador			VARCHAR(62)	CONSTRAINT nn_jogador		NOT NULL,
+	personagem		VARCHAR(62)	CONSTRAINT nn_personagem	NOT NULL,
+	raca			VARCHAR(32)	CONSTRAINT nn_raca			NOT NULL,
+	classe			VARCHAR(32)	CONSTRAINT nn_classe		NOT NULL,
+	nivel			INTEGER		DEFAULT		1,
+	alinhamento		VARCHAR(32)	CONSTRAINT nn_alinhamento	NOT NULL,
+	xp				INTEGER		DEFAULT		0,
+	base_ataque		INTEGER,
+	jogada_protecao	INTEGER,
+	peso			INTEGER		CONSTRAINT nn_peso			NOT NULL,
+	idade			INTEGER		CONSTRAINT nn_idade			NOT NULL,
+	altura			INTEGER		CONSTRAINT nn_altura		NOT NULL
+);
+
+CREATE TRIGGER tg_personagem_auditoria
+AFTER INSERT OR UPDATE OR DELETE ON tb_personagem
+FOR EACH ROW EXECUTE PROCEDURE fn_personagem_auditoria();
+
+CREATE OR REPLACE FUNCTION fn_personagem_auditoria()
+RETURNS trigger AS
+$$
+	BEGIN
+    		IF(tg_op = 'DELETE') THEN
+        	    INSERT INTO tb_personagem_auditoria
+        	    SELECT 'E', user, now(), OLD.*;
+        	    RETURN OLD;
+        	ELSIF(tg_op = 'UPDATE') THEN
+        	    INSERT INTO tb_personagem_auditoria
+           	    SELECT 'A', user, now(),OLD.*;
+        	    INSERT INTO tb_personagem_auditoria
+        	    SELECT 'A', user, now(),NEW.*;
+        	    RETURN NEW;
+        	ELSIF(tg_op = 'INSERT') THEN
+        	    INSERT INTO tb_empregados_auditoria
+        	    SELECT 'I', user, now(),NEW.*;
+        	    RETURN NEW;
+        	END IF;
+        	RETURN NULL;
+	END
+$$
+LANGUAGE plpgsql
+
+SELECT * FROM tb_personagem_auditoria;
+
+
+---- TESTES
+
+---------------------------
+--personagem 2
+INSERT INTO tb_dados
+VALUES('Matheus',1,6,5,5,3),
+('Matheus',2,5,5,3,1),
+('Matheus',3,3,4,4,5),
+('Matheus',4,6,2,2,6),
+('Matheus',5,3,3,1,2),
+('Matheus',6,4,5,6,1);
+
+
+SELECT fn_valores_para_atributo('Matheus');
+
+SELECT fn_atributos_decres('Matheus','Destreza','Constituição','Força','Sabedoria','Carisma','Inteligência')
+
+---------------------------------
+--personagem 3
+INSERT INTO tb_dados
+VALUES('Palmeirense',1,3,2,4,2),
+('Palmeirense',2,6,6,2,2),
+('Palmeirense',3,2,4,1,2),
+('Palmeirense',4,4,4,5,1),
+('Palmeirense',5,6,1,5,4),
+('Palmeirense',6,1,2,1,1);
+
+
+SELECT fn_valores_para_atributo('Palmeirense');

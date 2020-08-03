@@ -1,0 +1,54 @@
+--AULA BANCO DE DADOS PRÁTICA 1
+
+-- Criando tabela
+CREATE TABLE teste(
+id_teste INTEGER,
+nome VARCHAR(40),
+CPF VARCHAR(10)
+);
+--FIM
+
+INSERT INTO teste (id_teste,nome,cpf) VALUES(2,'JOSE','123456789');
+
+INSERT INTO teste VALUES(3,'Pedro','12345678');				--não precisa escrever os campos
+
+INSERT INTO teste VALUES(4,'Vinicius',NULL);				--pra falar que n tem cpf (NULL)
+
+INSERT INTO teste (id_teste,nome) VALUES(5,'milk');			--avisa antes que n tem cpf
+
+SELECT * FROM teste;										--mostra a tabela
+
+
+--Criando SCHEMA (hierarquia)
+CREATE SCHEMA vendas;
+--Fim
+
+-- Criando tabela
+CREATE TABLE vendas.teste2(
+id_teste INTEGER,
+nome VARCHAR(40),
+CPF VARCHAR(10)
+);
+--Fim
+
+INSERT INTO vendas.teste2 (id_teste,nome,cpf) VALUES(2,'JOSE','123456789');		--vendas.teste2 para acessar sem precisar abrir o Query Tool em vendas
+SELECT * FROM vendas.teste2;
+
+
+CREATE TABLE vendas.produtos (
+	cod_prod	INTEGER PRIMARY KEY,
+	nome		VARCHAR(40),
+	preco		NUMERIC(5,2)
+);
+INSERT INTO vendas.produtos VALUES(2,'casquinha',3.00);
+SELECT * FROM vendas.produtos;
+
+CREATE TABLE vendas.pedidos (
+	cod_pedido	integer PRIMARY KEY,
+    cod_prod	integer,
+    quantidade	integer,
+    CONSTRAINT pedidos_fk	FOREIGN KEY (cod_prod)	REFERENCES vendas.produtos (cod_prod)		--define a "chave estrangeira"
+);
+SELECT * FROM vendas.pedidos;
+INSERT INTO vendas.pedidos VALUES (1,1,3);
+INSERT INTO vendas.pedidos VALUES (2,11,3);
